@@ -8,8 +8,8 @@ app = FastAPI()
 
 # ========== KONFIGURASI HARDCODED ==========
 # GANTI DENGAN DATA MONGODB ANDA!
-MONGO_URI = "mongodb+srv://galeh:galeh@cluster0.cq2tj1u.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-MY_SECRET_TOKEN = "MySecretToken12345"
+MONGO_URI = "mongodb+srv://galeh:galeh@cluster0.1jalbd6.mongodb.net/?retryWrites=true&w=majority"
+MY_SECRET_TOKEN = "frapidata"
 # ===========================================
 
 # Koneksi MongoDB
