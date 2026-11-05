@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -8,7 +9,6 @@ import json
 import os
 
 # ========== KONFIGURASI (via env vars, ada fallback) ==========
-# FIX: pindahkan ke environment variables — jangan hardcode kredensial
 MONGO_URI = os.getenv(
     "MONGO_URI",
     "mongodb+srv://galeh:galeh@cluster0.1jalbd6.mongodb.net/?retryWrites=true&w=majority",
@@ -21,28 +21,36 @@ if not MY_SECRET_TOKEN:
     raise RuntimeError("Environment variable MY_SECRET_TOKEN wajib diset!")
 # =============================================================
 
-# Koneksi MongoDB
-# FIX: HAPUS `db = client.get_default_database()` — tidak dipakai & bikin error
+# Koneksi MongoDB (TANPA get_default_database — error sebelumnya)
 client = AsyncIOMotorClient(MONGO_URI)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Cek koneksi saat startup (fail-fast kalau Mongo tak terjangkau)
+    """Ping Mongo saat startup, tutup saat shutdown."""
     try:
         await client.admin.command("ping")
         print("✅ MongoDB connected")
     except Exception as e:
-        print(f"⚠️ MongoDB ping failed: {e}")
+        print(f"⚠️  MongoDB ping failed: {e}")
 
     yield
 
-    # Tutup koneksi saat shutdown
     client.close()
     print("🔌 MongoDB connection closed")
 
 
 app = FastAPI(title="MongoDB CRUD API", lifespan=lifespan)
+
+# ========== CORS (WAJIB agar HTML test bisa akses) ==========
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # testing: semua origin. Produksi: ganti ke domain spesifik
+    allow_credentials=False,      # HARUS False kalau allow_origins="*"
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# ============================================================
 
 
 # ========== Helper ==========
@@ -57,8 +65,8 @@ def parse_json(data):
     return data
 
 
-def _convert_id_in_filter(filter_data: dict) -> dict:
-    """Konversi `_id` (string) di filter ke ObjectId, validasi format."""
+def _convert_id_in_filter(filter_data):
+    """Konversi `_id` (string) ke ObjectId, validasi format."""
     if not isinstance(filter_data, dict):
         raise HTTPException(status_code=400, detail="Filter harus berupa object JSON")
     if "_id" in filter_data and isinstance(filter_data["_id"], str):
@@ -72,7 +80,7 @@ def _convert_id_in_filter(filter_data: dict) -> dict:
     return filter_data
 
 
-def _auth(x_api_token: str | None):
+def _auth(x_api_token):
     if x_api_token != MY_SECRET_TOKEN:
         raise HTTPException(status_code=401, detail="Token salah!")
 
@@ -334,8 +342,7 @@ async def delete_many_data(
     except Exception:
         raise HTTPException(status_code=400, detail="JSON tidak valid")
 
-    # FIX: field 'filter' wajib ADA (boleh {} untuk hapus semua).
-    # Sebelumnya `{}` ditolak padahal di pesan error disuruh pakai `{}` — kontradiktif.
+    # Field 'filter' wajib ada. Gunakan {} untuk hapus SEMUA.
     if "filter" not in body:
         raise HTTPException(
             status_code=400,
